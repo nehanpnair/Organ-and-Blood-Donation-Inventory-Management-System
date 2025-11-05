@@ -471,6 +471,7 @@ function AddRecipient() {
     required_organ: "",
     address: "",
     medical: "",
+    quantity: 1,
   });
 
   const [msg, setMsg] = useState({ text: "", type: "" });
@@ -492,6 +493,7 @@ function AddRecipient() {
       required_organ: "",
       address: "",
       medical: "",
+      quantity: 1,
     });
   };
 
@@ -590,6 +592,15 @@ function AddRecipient() {
             value={form.required_organ}
             onChange={onChange}
             placeholder="Required Organ"
+          />
+
+          <input
+            type="number"
+            name="quantity"
+            value={form.quantity}
+            onChange={onChange}
+            min="1"
+            placeholder="Quantity Required"
           />
 
           <textarea

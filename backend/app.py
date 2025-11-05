@@ -127,9 +127,11 @@ def add_recipient():
     data = request.json or {}
     if not data.get('full_name'):
         return jsonify({'error': 'Full Name required'}), 400
+    quantity = data.get('quantity', 1)
     try:
         conn = get_connection()
         cur = conn.cursor()
+        cur.execute("SET @quantity = %s;", (quantity,))
         cur.execute("""INSERT INTO Recipient
             (Full_Name, Gender, DOB, Contact_No, Email, Medical_Condition, Required_Organ, Required_Blood_Group, Address)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
