@@ -63,7 +63,7 @@ function Banner() {
 }
 
 
-function Nav({ setView, activeView }) {
+function Nav({ setView, activeView, user}) {
   const tabs = [
     { name: 'Dashboard', icon: 'fa-solid fa-house' },
     { name: 'Add Donor', icon: 'fa-solid fa-user-plus' },
@@ -73,9 +73,14 @@ function Nav({ setView, activeView }) {
     { name: 'Pending Requests', icon: 'fa-solid fa-clipboard-list' },
     { name: 'Inventory', icon: 'fa-solid fa-box-archive' },
     { name: 'Fulfill Request', icon: 'fa-solid fa-check-circle' },
-    { name: 'Add Staff', icon: 'fa-solid fa-user-tie' },
-    { name: 'View Staff', icon: 'fa-solid fa-id-card' },
   ];
+
+  if (user?.Role === 'Admin') {
+    tabs.push(
+      { name: 'Add Staff', icon: 'fa-solid fa-user-tie' },
+      { name: 'View Staff', icon: 'fa-solid fa-id-card' }
+    );
+  }
 
   return (
     <nav className="nav-glass">
@@ -177,10 +182,12 @@ function Dashboard({ onLogin, user, setView }) {
               <span>Inventory</span>
             </button>
 
+            {user?.Role === 'Admin' && (
             <button className="quick-btn" onClick={() => setView('Add Staff')}>
-            <i className="fa-solid fa-user-tie"></i>
-            <span>Add Staff</span>
-          </button>
+              <i className="fa-solid fa-user-tie"></i>
+              <span>Add Staff</span>
+            </button>
+          )}
 
           </div>
 
@@ -1380,7 +1387,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Banner /> 
-      {user && view !== 'Dashboard' && <Nav setView={setView} activeView={view} />}
+      {user && view !== 'Dashboard' && <Nav setView={setView} activeView={view} user={user} />}
       <main className={user ? "mt-24" : "mt-16"}>
         {view === 'Dashboard' && <Dashboard onLogin={setUser} user={user} setView={setView} />}
         {user && (
@@ -1392,8 +1399,9 @@ export default function App() {
             {view === 'Pending Requests' && <PendingRequests />}
             {view === 'Inventory' && <Inventory />}
             {view === 'Fulfill Request' && <FulfillRequest />}
-            {view === 'Add Staff' && <AddStaff />}
-            {view === 'View Staff' && <ViewStaff />}
+            
+            {user.Role === 'Admin' && view === 'Add Staff' && <AddStaff />}
+            {user.Role === 'Admin' && view === 'View Staff' && <ViewStaff />}
           </>
         )}
       </main>
