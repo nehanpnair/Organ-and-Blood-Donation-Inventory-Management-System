@@ -334,6 +334,72 @@ def login():
 
     except mysql.connector.Error as e:
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/staff', methods=['POST'])
+def add_staff():
+    data = request.get_json()
+    required_fields = ['full_name', 'role', 'username', 'password']
+
+    if not all(field in data and data[field] for field in required_fields):
+        return jsonify({"error": "Missing required fields."}), 400
+
+    full_name = data.get('full_name')
+    role = data.get('role')
+    contact = data.get('contact')
+    email = data.get('email')
+    username = data.get('username')
+    password = data.get('password')
+
+    if not re.match(r"^[A-Za-z0-9_]{3,}$", username):
+        return jsonify({"error": "Invalid username format."}), 400
+    if email and not is_valid_email(email):
+        return jsonify({"error": "Invalid email address."}), 400
+    if contact and not is_valid_phone(contact):
+        return jsonify({"error": "Invalid contact number."}), 400
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT * FROM staff WHERE Username = %s OR Email = %s",
+            (username, email)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({"error": "Username or Email already exists."}), 400
+
+        password_hash = password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        cursor.execute("""
+            INSERT INTO staff (Full_Name, Role, Contact_No, Email, Username, Password_Hash)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (full_name, role, contact, email, username, password_hash))
+        conn.commit()
+
+        return jsonify({"message": "Staff member added successfully!"}), 201
+
+    except mysql.connector.Error as e:
+        print("Error adding staff:", e)
+        return jsonify({"error": "Database error occurred."}), 500
+
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/api/staff', methods=['GET'])
+def list_staff():
+    try:
+        conn = get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT Staff_ID, Full_Name, Role, Contact_No, Email, Username FROM Staff ORDER BY Staff_ID DESC;")
+        rows = cur.fetchall()
+        conn.close()
+        return jsonify({"data": rows}), 200
+    except mysql.connector.Error as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

@@ -14,6 +14,13 @@ import {
   Legend,
 } from "chart.js";
 
+function showMessage(setMsg, text, type) {
+  setMsg({ text, type, fadeOut: false });
+  setTimeout(() => setMsg((prev) => ({ ...prev, fadeOut: true })), 2000);
+  setTimeout(() => setMsg({ text: "", type: "", fadeOut: false }), 2800);
+}
+
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -30,10 +37,17 @@ function useApi(path, opts) {
   return fetch(base + path, opts)
     .then(async (r) => {
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `Request failed: ${r.status}`);
+      if (!r.ok) {
+        const errorMsg =
+          data.error ||
+          data.message ||
+          `Request failed: ${r.status} ${r.statusText}`;
+        throw new Error(errorMsg);
+      }
+
       return data;
     })
-    .catch((err) => ({ error: err.message }));
+    .catch((err) => {return { error: `Unable to connect to the server. ${err.message || ''}` };});
 }
 
 
@@ -59,6 +73,8 @@ function Nav({ setView, activeView }) {
     { name: 'Pending Requests', icon: 'fa-solid fa-clipboard-list' },
     { name: 'Inventory', icon: 'fa-solid fa-box-archive' },
     { name: 'Fulfill Request', icon: 'fa-solid fa-check-circle' },
+    { name: 'Add Staff', icon: 'fa-solid fa-user-tie' },
+    { name: 'View Staff', icon: 'fa-solid fa-id-card' },
   ];
 
   return (
@@ -85,14 +101,19 @@ function Dashboard({ onLogin, user, setView }) {
   async function handleLogin(e) {
     e.preventDefault();
     setError('');
-    const res = await fetch('/api/login', {
+    const res = await useApi('/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
     });
-    const data = await res.json();
-    if (res.ok) onLogin(data.user);
-    else setError(data.error || 'Login failed');
+
+    if (res.error) {
+      setError(res.error);
+    } else if (res.user) {
+      onLogin(res.user);
+    } else {
+      setError('Unexpected response from server.');
+    }
   }
 
   return (
@@ -155,6 +176,12 @@ function Dashboard({ onLogin, user, setView }) {
               <i className="fa-solid fa-box-archive"></i>
               <span>Inventory</span>
             </button>
+
+            <button className="quick-btn" onClick={() => setView('Add Staff')}>
+            <i className="fa-solid fa-user-tie"></i>
+            <span>Add Staff</span>
+          </button>
+
           </div>
 
           <p className="motivation">
@@ -511,18 +538,13 @@ function AddRecipient() {
       const data = await res.json();
 
       if (res.ok) {
-        setMsg({ text: data.message || "Recipient added successfully!", type: "success", fadeOut: false });
-        clearForm();
-        setTimeout(() => setMsg((p) => ({ ...p, fadeOut: true })), 2500);
-        setTimeout(() => setMsg({ text: "", type: "", fadeOut: false }), 3100);
+        showMessage(setMsg, "Recipient added successfully!", "success");
       } else {
         setMsg({ text: data.error || "Failed to add recipient.", type: "error", fadeOut: false });
-        setTimeout(() => setMsg((p) => ({ ...p, fadeOut: true })), 2500);
-        setTimeout(() => setMsg({ text: "", type: "", fadeOut: false }), 3100);
+        showMessage(setMsg, "Failed to add recipient.", "error");
       }
     } catch (err) {
-      setMsg({ text: "Server error. Please try again.", type: "error", fadeOut: false });
-    } finally {
+      showMessage(setMsg, "Failed to add recipient.", "error");    } finally {
       setLoading(false);
     }
   };
@@ -697,7 +719,6 @@ function AddDonation() {
           ],
         });
 
-        // ⬅️ Force Chart.js to re-render even if same data structure
         setChartVersion(v => v + 1);
       } else {
         console.error("Error fetching stats:", data.error);
@@ -752,29 +773,14 @@ function AddDonation() {
       }
 
       if (res.status >= 200 && res.status < 300) {
-        // ✅ Works for 201 Created too
-        setMsg({
-          text: data.message || "Donation added successfully!",
-          type: "success",
-          fadeOut: false,
-        });
+        showMessage(setMsg, "Donation added successfully!", "success");
         clearForm();
-        fetchStats(); // refresh graphs immediately
-        setTimeout(() => setMsg(p => ({ ...p, fadeOut: true })), 2500);
-        setTimeout(() => setMsg({ text: "", type: "", fadeOut: false }), 3100);
+        fetchStats();
       } else {
-        setMsg({
-          text: data.error || "Failed to add donation.",
-          type: "error",
-          fadeOut: false,
-        });
+        showMessage(setMsg, "Failed to add donation.", "error");
       }
     } catch (err) {
-      setMsg({
-        text: "Network or server error. Please try again.",
-        type: "error",
-        fadeOut: false,
-      });
+      showMessage(setMsg, "Network or Server Error.", "error");
     } finally {
       setLoading(false);
     }
@@ -791,7 +797,7 @@ function AddDonation() {
           </h3>
           {dailyData ? (
             <Line
-              key={`line-${chartVersion}`} // ⬅️ ensures Chart.js refresh
+              key={`line-${chartVersion}`}
               data={dailyData}
               options={{
                 responsive: true,
@@ -799,8 +805,17 @@ function AddDonation() {
                 aspectRatio: 2.2,
                 plugins: { legend: { display: false } },
                 scales: {
-                  x: { ticks: { color: "#ccc" }, grid: { color: "rgba(255,255,255,0.05)" } },
-                  y: { ticks: { color: "#ccc" }, grid: { color: "rgba(255,255,255,0.05)" } },
+                  x: { ticks: { color: "#ccc", callback: function (value, index, ticks) {
+                                                          const label = this.getLabelForValue(value);
+                                                          if (!label) return "";
+                                                          const date = new Date(label);
+                                                          if (isNaN(date)) return label;
+                                                          return date.toLocaleDateString(undefined, {
+                                                            month: "short",
+                                                            day: "numeric",
+                                                          }); }, },
+                  grid: { color: "rgba(255,255,255,0.05)" } },
+                  y: { ticks: { color: "#ccc", callback: function (value) {if (Number.isInteger(value)){return value;} return null;}, }, grid: { color: "rgba(255,255,255,0.05)" },  beginAtZero: true},
                 },
               }}
             />
@@ -1150,6 +1165,214 @@ function FulfillRequest() {
   );
 }
 
+function AddStaff() {
+  const [form, setForm] = useState({
+    full_name: "",
+    role: "",
+    contact: "",
+    email: "",
+    username: "",
+    password: "",
+  });
+
+  const [msg, setMsg] = useState({ text: "", type: "" });
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const clearForm = () => {
+    setForm({
+      full_name: "",
+      role: "",
+      contact: "",
+      email: "",
+      username: "",
+      password: "",
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMsg({ text: "", type: "" });
+
+    try {
+      const res = await fetch("/api/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        showMessage(setMsg, "Staff member added successfully!", "success");
+        clearForm();
+      } else {
+        showMessage(setMsg, data.error || "Failed to add staff.", "error");
+      }
+    } catch (err) {
+      showMessage(setMsg, "Network or server error.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="page-content flex justify-center items-center min-h-[calc(100vh-140px)]">
+      <div className="recipient-form-card"> {/* same style class as AddRecipient */}
+        <h2 className="form-title">
+          <i className="fa-solid fa-user-tie"></i> Add Staff
+        </h2>
+
+        <form className="recipient-form" onSubmit={handleSubmit}>
+          <input
+            type="text"
+            name="full_name"
+            value={form.full_name}
+            onChange={handleChange}
+            placeholder="Full Name"
+            required
+          />
+
+          <input
+            type="text"
+            name="role"
+            value={form.role}
+            onChange={handleChange}
+            placeholder="Role"
+            required
+          />
+
+          <input
+            type="text"
+            name="contact"
+            value={form.contact}
+            onChange={handleChange}
+            placeholder="Contact Number"
+          />
+
+          <input
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="Email"
+          />
+
+          <div className="inline-inputs">
+            <input
+              type="text"
+              name="username"
+              value={form.username}
+              onChange={handleChange}
+              placeholder="Username"
+              required
+            />
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              placeholder="Password"
+              required
+            />
+          </div>
+
+          {msg.text && (
+            <div className={`msg-box ${msg.type} ${msg.fadeOut ? "hidden" : ""}`}>
+              {msg.text}
+            </div>
+          )}
+
+          <div className="form-buttons horizontal">
+            <button type="submit" className="submit-btn" disabled={loading}>
+              {loading ? "Adding..." : "Add Staff"}
+            </button>
+            <button
+              type="button"
+              className="clear-btn"
+              onClick={clearForm}
+              disabled={loading}
+            >
+              Clear Form
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ViewStaff() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const res = await useApi("/staff");
+    if (res.error) {
+      console.error(res.error);
+    } else {
+      setRows(res.data || []);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  return (
+    <div className="page-content">
+      <div className="section-header">
+        <h2 className="section-title">
+          <i className="fa-solid fa-id-card"></i> Staff Members
+        </h2>
+        <button onClick={load} className="reload-btn" disabled={loading}>
+          <i className="fa-solid fa-rotate"></i>
+          <span>{loading ? "Reloading..." : "Reload"}</span>
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="loading-text">Loading staff...</div>
+      ) : rows.length === 0 ? (
+        <div className="table-empty">No staff found.</div>
+      ) : (
+        <div className="table-container">
+          <table className="table-glass min-w-full">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Contact</th>
+                <th>Email</th>
+                <th>Username</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.Staff_ID}>
+                  <td>{r.Staff_ID}</td>
+                  <td>{r.Full_Name}</td>
+                  <td>{r.Role}</td>
+                  <td>{r.Contact_No}</td>
+                  <td>{r.Email}</td>
+                  <td>{r.Username}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = React.useState('Dashboard');
   const [user, setUser] = React.useState(null);
@@ -1169,6 +1392,8 @@ export default function App() {
             {view === 'Pending Requests' && <PendingRequests />}
             {view === 'Inventory' && <Inventory />}
             {view === 'Fulfill Request' && <FulfillRequest />}
+            {view === 'Add Staff' && <AddStaff />}
+            {view === 'View Staff' && <ViewStaff />}
           </>
         )}
       </main>
